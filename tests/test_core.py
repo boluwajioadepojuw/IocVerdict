@@ -2,6 +2,7 @@ from ioc_intel.classify import kind_of
 from ioc_intel.score import verdict_score
 from ioc_intel.attck import map_findings
 from ioc_intel.report import to_text, to_json
+from ioc_intel.enrich import urlhaus_host, _csv_listed
 
 
 def test_kind_ipv4():
@@ -52,3 +53,26 @@ def test_json_report():
     data = json.loads(to_json("x.com", "domain", 10, [], {}))
     assert data["indicator"] == "x.com"
     assert data["score"] == 10
+
+
+def test_urlhaus_host_from_url():
+    assert urlhaus_host("http://105.184.94.10:40511/bin.sh", "url") == "105.184.94.10"
+    assert urlhaus_host("https://evil.example.com/login", "url") == "evil.example.com"
+
+
+def test_urlhaus_host_domain_passthrough():
+    assert urlhaus_host("paypa1.com", "domain") == "paypa1.com"
+
+
+def test_urlhaus_host_non_url_kinds_empty():
+    assert urlhaus_host("8.8.8.8", "ipv4") == ""
+
+
+def test_csv_listed_finds_host():
+    csv_text = '"id","dateadded","url","url_status"\n"1","2026-10-01","http://105.184.94.10:40511/bin.sh","online"\n'
+    assert _csv_listed("105.184.94.10", csv_text) is True
+
+
+def test_csv_listed_misses_unknown_host():
+    csv_text = '"id","dateadded","url","url_status"\n"1","2026-10-01","http://1.2.3.4/x.sh","online"\n'
+    assert _csv_listed("9.9.9.9", csv_text) is False

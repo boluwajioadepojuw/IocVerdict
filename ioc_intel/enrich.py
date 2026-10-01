@@ -1,12 +1,17 @@
-"""Source lookups - ask five free threat-intel services about one IOC."""
+"""Source lookups - ask six free threat-intel services about one IOC."""
 
 from __future__ import annotations
 
+import csv
+import io
 import os
 import time
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import requests
+
+URLHAUS_CSV_URL = "https://urlhaus.abuse.ch/downloads/csv_recent/"
 
 
 def _get(url: str, headers: Optional[Dict[str, str]] = None, timeout: int = 10) -> Optional[Dict[str, Any]]:
@@ -70,14 +75,44 @@ def feodo(value: str) -> Dict[str, Any]:
         return {}
 
 
+def urlhaus_host(value: str, kind: str) -> str:
+    """The host URLhaus tracks: domains pass through, URLs reduce to hostname."""
+    if kind == "domain":
+        return value.lower()
+    if kind == "url":
+        try:
+            return (urlparse(value).hostname or "").lower()
+        except ValueError:
+            return ""
+    return ""
+
+
+def _csv_listed(host: str, csv_text: str) -> bool:
+    """True when any cell of the URLhaus recent-URLs CSV mentions the host."""
+    for row in csv.reader(io.StringIO(csv_text)):
+        if any(host in cell for cell in row):
+            return True
+    return False
+
+
 def urlhaus(value: str, kind: str) -> Dict[str, Any]:
-    if kind not in ("domain", "url"):
+    host = urlhaus_host(value, kind)
+    if not host:
         return {}
+    key = os.environ.get("URLHAUS_API_KEY", "")
     try:
-        r = requests.post("https://urlhaus-api.abuse.ch/v1/host/",
-                          data={"host": value}, timeout=15)
-        d = r.json()
-        return {"urlhaus_listed": d.get("query_status") == "ok"}
+        if key:
+            r = requests.post("https://urlhaus-api.abuse.ch/v1/host/",
+                              data={"host": host},
+                              headers={"Auth-Key": key},
+                              timeout=15)
+            d = r.json()
+            return {"urlhaus_listed": d.get("query_status") == "ok" and bool(d.get("urls"))}
+        # No key: the public CSV of recent entries works without auth.
+        r = requests.get(URLHAUS_CSV_URL, timeout=30)
+        if r.status_code != 200:
+            return {}
+        return {"urlhaus_listed": _csv_listed(host, r.text)}
     except Exception:
         return {}
 
