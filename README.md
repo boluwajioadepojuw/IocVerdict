@@ -1,7 +1,9 @@
 # IocVerdict
 
+[![CI](https://github.com/boluwajioadepojuw/IocVerdict/actions/workflows/ci.yml/badge.svg)](https://github.com/boluwajioadepojuw/IocVerdict/actions/workflows/ci.yml)
+
 Small threat-intel console: feed it an IP, domain, URL or hash, and it asks
-five free sources what they think, folds the answers into one 0-100 score,
+six free sources what they think, folds the answers into one 0-100 score,
 and maps the result onto MITRE ATT&CK.
 
 ## What it does
@@ -35,6 +37,24 @@ Live run against a real C2 IP from the Feodo Tracker blocklist:
 
 docs/case-study.md walks a suspected C2 callback from the SIEM alert to the
 final verdict, showing what each source contributed.
+
+## Tests
+
+The scoring and classification engine has a pytest suite (CI runs it on
+Python 3.11 and 3.12):
+
+```bash
+pip install pytest
+python -m pytest -q
+```
+
+## Related projects
+
+- [SOCAtelier](https://github.com/boluwajioadepojuw/SOCAtelier) - the SOC lab whose cases surface the indicators this tool scores
+- [SigScope](https://github.com/boluwajioadepojuw/SigScope) - ATT&CK coverage gate for the Sigma rules behind the detections
+- [SplunkHarbor](https://github.com/boluwajioadepojuw/SplunkHarbor) - Splunk ingestion for the same endpoint telemetry
+- [DomainSieve](https://github.com/boluwajioadepojuw/DomainSieve) - NRD feed to Suricata rules on the gateway
+- [ArpSieve](https://github.com/boluwajioadepojuw/ArpSieve) - ARP spoofing detection on the local segment
 
 ## Author
 
