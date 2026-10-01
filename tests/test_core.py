@@ -2,7 +2,7 @@ from ioc_intel.classify import kind_of
 from ioc_intel.score import verdict_score
 from ioc_intel.attck import map_findings
 from ioc_intel.report import to_text, to_json
-from ioc_intel.enrich import urlhaus_host, _csv_listed
+from ioc_intel.enrich import urlhaus_host, _csv_listed, _cache_fresh, _cache_path, malware_bazaar
 
 
 def test_kind_ipv4():
@@ -76,3 +76,58 @@ def test_csv_listed_finds_host():
 def test_csv_listed_misses_unknown_host():
     csv_text = '"id","dateadded","url","url_status"\n"1","2026-10-01","http://1.2.3.4/x.sh","online"\n'
     assert _csv_listed("9.9.9.9", csv_text) is False
+
+
+def test_mb_listed_scores():
+    assert verdict_score({"mb_listed": True}) == 40
+
+
+def test_mb_maps_to_malicious_file():
+    mapped = map_findings({"mb_listed": True})
+    assert any(t["id"] == "T1204.002" for t in mapped)
+
+
+def test_malware_bazaar_skips_non_hashes(monkeypatch):
+    monkeypatch.setenv("MALWAREBAZAAR_API_KEY", "test-key")
+    assert malware_bazaar("8.8.8.8", "ipv4") == {}
+    assert malware_bazaar("paypa1.com", "domain") == {}
+
+
+def test_malware_bazaar_requires_key(monkeypatch):
+    monkeypatch.delenv("MALWAREBAZAAR_API_KEY", raising=False)
+    assert malware_bazaar("44d88612fea8a8f36de82e1278abb02f", "md5") == {}
+
+
+def test_malware_bazaar_get_info(monkeypatch):
+    monkeypatch.setenv("MALWAREBAZAAR_API_KEY", "test-key")
+
+    class FakeResp:
+        def json(self):
+            return {"query_status": "ok", "data": [{"signature": "EICAR", "sha256_hash": "x"}]}
+
+    calls = []
+
+    def fake_post(url, **kw):
+        calls.append(kw)
+        return FakeResp()
+
+    monkeypatch.setattr("ioc_intel.enrich.requests.post", fake_post)
+    res = malware_bazaar("44d88612fea8a8f36de82e1278abb02f", "md5")
+    assert res["mb_listed"] is True
+    assert res["mb_signature"] == "EICAR"
+    assert calls[0]["headers"] == {"Auth-Key": "test-key"}
+
+
+def test_cache_fresh_ttl(tmp_path):
+    path = str(tmp_path / "cache.csv")
+    open(path, "w").write("x")
+    assert _cache_fresh(path) is True
+    import os
+    old = 2 * 3600 + 5
+    os.utime(path, (old, old))
+    assert _cache_fresh(path) is False
+
+
+def test_cache_path_under_tmp():
+    import os
+    assert _cache_path().startswith(os.path.join(os.path.sep + "tmp", "iocverdict")) or os.path.exists(os.path.dirname(_cache_path()))

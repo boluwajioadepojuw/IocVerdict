@@ -24,6 +24,8 @@ def map_findings(data: Dict[str, Any]) -> List[Dict[str, str]]:
         tags.add("botnet")
     if data.get("urlhaus_listed"):
         tags.add("malware")
+    if data.get("mb_listed"):
+        tags.add("malware")
     if data.get("vt_positives", 0) >= 3:
         tags.add("c2")
     if data.get("otx_pulse_count", 0) >= 3:

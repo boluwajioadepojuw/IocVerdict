@@ -21,6 +21,7 @@ def verdict_score(data: Dict[str, Any]) -> int:
     total += min(data.get("total_reports", 0) * 0.4, 15)
     total += 25 if data.get("feodo_listed") else 0
     total += 20 if data.get("urlhaus_listed") else 0
+    total += 40 if data.get("mb_listed") else 0
     total += min(data.get("otx_pulse_count", 0) * 4, 25)
     total += min(len(data.get("shodan_vulnerabilities", [])) * 8, 20)
 

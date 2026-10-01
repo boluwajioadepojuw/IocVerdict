@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import os
+import tempfile
 import time
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -12,6 +13,8 @@ from urllib.parse import urlparse
 import requests
 
 URLHAUS_CSV_URL = "https://urlhaus.abuse.ch/downloads/csv_recent/"
+MALWAREBAZAAR_URL = "https://mb-api.abuse.ch/api/v1/"
+CACHE_TTL = 3600
 
 
 def _get(url: str, headers: Optional[Dict[str, str]] = None, timeout: int = 10) -> Optional[Dict[str, Any]]:
@@ -95,6 +98,30 @@ def _csv_listed(host: str, csv_text: str) -> bool:
     return False
 
 
+def _cache_path() -> str:
+    d = os.path.join(tempfile.gettempdir(), "iocverdict")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "urlhaus_recent.csv")
+
+
+def _cache_fresh(path: str, ttl: int = CACHE_TTL) -> bool:
+    return os.path.exists(path) and (time.time() - os.path.getmtime(path)) < ttl
+
+
+def _read_cached_csv(url: str, ttl: int = CACHE_TTL) -> Optional[str]:
+    """URLhaus CSV with a 1-hour file cache: one download per session."""
+    path = _cache_path()
+    if _cache_fresh(path, ttl):
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    r = requests.get(url, timeout=30)
+    if r.status_code != 200:
+        return None
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(r.text)
+    return r.text
+
+
 def urlhaus(value: str, kind: str) -> Dict[str, Any]:
     host = urlhaus_host(value, kind)
     if not host:
@@ -109,10 +136,35 @@ def urlhaus(value: str, kind: str) -> Dict[str, Any]:
             d = r.json()
             return {"urlhaus_listed": d.get("query_status") == "ok" and bool(d.get("urls"))}
         # No key: the public CSV of recent entries works without auth.
-        r = requests.get(URLHAUS_CSV_URL, timeout=30)
-        if r.status_code != 200:
+        csv_text = _read_cached_csv(URLHAUS_CSV_URL)
+        if csv_text is None:
             return {}
-        return {"urlhaus_listed": _csv_listed(host, r.text)}
+        return {"urlhaus_listed": _csv_listed(host, csv_text)}
+    except Exception:
+        return {}
+
+
+def malware_bazaar(value: str, kind: str) -> Dict[str, Any]:
+    """MalwareBazaar hash lookup - free API key required (abuse.ch signup)."""
+    key = os.environ.get("MALWAREBAZAAR_API_KEY", "")
+    if not key or kind not in ("md5", "sha1", "sha256"):
+        return {}
+    try:
+        r = requests.post(MALWAREBAZAAR_URL,
+                          data={"query": "get_info", "hash": value},
+                          headers={"Auth-Key": key},
+                          timeout=15)
+        d = r.json()
+        if d.get("query_status") != "ok":
+            return {}
+        info = d.get("data") or []
+        if not info:
+            return {}
+        first = info[0]
+        return {
+            "mb_listed": True,
+            "mb_signature": first.get("signature") or first.get("file_name", ""),
+        }
     except Exception:
         return {}
 
@@ -140,9 +192,9 @@ def shodan(value: str) -> Dict[str, Any]:
 
 def run_all(value: str, kind: str) -> Dict[str, Any]:
     data: Dict[str, Any] = {}
-    for fn in (virus_total, abuse_ipdb, feodo, urlhaus, otx, shodan):
+    for fn in (virus_total, abuse_ipdb, feodo, urlhaus, otx, shodan, malware_bazaar):
         try:
-            if fn is virus_total or fn is urlhaus or fn is otx:
+            if fn in (virus_total, urlhaus, otx, malware_bazaar):
                 data.update(fn(value, kind))
             else:
                 data.update(fn(value))

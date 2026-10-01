@@ -3,14 +3,15 @@
 [![CI](https://github.com/boluwajioadepojuw/IocVerdict/actions/workflows/ci.yml/badge.svg)](https://github.com/boluwajioadepojuw/IocVerdict/actions/workflows/ci.yml)
 
 Small threat-intel console: feed it an IP, domain, URL or hash, and it asks
-six free sources what they think, folds the answers into one 0-100 score,
+seven free sources what they think, folds the answers into one 0-100 score,
 and maps the result onto MITRE ATT&CK.
 
 ## What it does
 
 - classifies the indicator (ipv4/ipv6/domain/url/md5/sha1/sha256)
-- queries VirusTotal, AbuseIPDB, Feodo Tracker, URLhaus, OTX and Shodan
-  (each source is optional - missing keys are skipped, the rest still run)
+- queries VirusTotal, AbuseIPDB, Feodo Tracker, URLhaus, OTX, Shodan and
+  MalwareBazaar (each source is optional - missing keys are skipped, the
+  rest still run; MalwareBazaar's key is free from abuse.ch)
 - scores 0-100 with per-source weights
 - maps findings to MITRE ATT&CK techniques
 - prints a compact verdict or --json output
@@ -25,7 +26,8 @@ python3 main.py --json d41d8cd98f00b204e9800998ecf8427e
 ```
 
 No keys needed to try it: without keys the lookups are skipped and the
-score reflects only what the free feeds (Feodo, URLhaus) return.
+score reflects only what the free feeds return (Feodo blocklist, URLhaus
+recent-URLs CSV - cached for an hour between runs).
 
 ## Screenshot
 
